@@ -6,75 +6,92 @@
 
 ## Macro
 
-	{% macro srcsetImgix(settings) %}
-		{% spaceless %}
+```
+{% macro srcsetImgix(settings) %}
+	{% spaceless %}
 
-		 {# -- SETUP -- #}
-			{% set class = (settings.class is defined and settings.class|length) ? settings.class : '' %}
-			{% set lazyload = (settings.lazyload is defined and settings.lazyload == false) ? '' : 'lazyload' %}
-			{% set paramsCraftDefault = { mode: 'crop', position: 'center-center', quality: 65 } %}
-			{% set paramsImgixDefault = '&fit=crop&crop=entropy&auto=enhance,compress&q=40' %}
-			{% set sizes = (settings.sizes is defined and settings.sizes|length) ? settings.sizes : 'auto' %}
-			{% set alt = (settings.alt is defined and settings.alt|length) ? settings.alt : (settings.asset is defined) ? settings.asset.title : '' %}
+	 {# -- SETUP -- #}
+		{% set class = (settings.class is defined and settings.class|length) ? settings.class : '' %}
+		{% set lazyload = (settings.lazyload is defined and settings.lazyload == false) ? '' : 'lazyload' %}
+		{% set paramsImgixFp = '&fp-x' ~ settings.asset.focalPoint.x ~ '&fp-y' ~ settings.asset.focalPoint.y %}
+		{% set paramsCraftDefault = { mode: 'crop', position: 'center-center', quality: 40 } %}
+		{% set paramsImgixDefault = '&fit=crop&crop=focalpoint&auto=format,compress&q=40' %}
+		{% set sizes = (settings.sizes is defined and settings.sizes|length) ? settings.sizes : 'auto' %}
+		{% set alt = (settings.alt is defined and settings.alt|length) ? settings.alt : (settings.asset is defined) ? settings.asset.title : '' %}
+		{% set mode = (settings.asset.width > settings.asset.height) ? 'landscape' : 'portrait' %}
 
-			{% if craft.config.devMode == true %}
+		{% if craft.app.config.general.imgix == false or settings.asset.extension == 'svg' %}
 
-				{% set img = (settings.asset|length) ? settings.asset : '' %}
-				{% set paramsCraft = (settings.paramsCraft is defined and settings.paramsCraft|length) ? settings.paramsCraft : paramsCraftDefault %}
+			{% set img = (settings.asset|length) ? settings.asset : '' %}
+			{% set paramsCraft = (settings.paramsCraft is defined and settings.paramsCraft|length) ? settings.paramsCraft : paramsCraftDefault %}
+	    {% set srcset = [] %}
 
-			{% else %}
+		  {%- for outputDim in settings.srcset -%}
+		    {%- if outputDim.width <= img.width -%}
+		      {%- set srcset = srcset | merge([img.getUrl({ 
+		        width: outputDim.width, 
+		        height: (outputDim.height is defined) ? outputDim.height : 'auto',
+		        mode: paramsCraft.mode,
+		        position: paramsCraft.position,
+		        quality: paramsCraft.quality
+		       }) ~ ' ' ~ outputDim.width ~ 'w']) -%}
+		    {%- endif -%}
+		  {%- endfor -%}
 
-				{% set img = (settings.asset|length) ? craft.imgix.transformImage( settings.asset, { width: settings.width, height: settings.height }) : '' %}
-				{% set srcset = (settings.srcset|length) ? craft.imgix.transformImage( settings.asset, settings.srcset) : '' %}
-				{% set paramsImgix = (settings.paramsImgix is defined and settings.paramsImgix|length) ? settings.paramsImgix : paramsImgixDefault %}
-				{% set dataSrcset = [] %}
-				{% for item in srcset.transformed %}
-					{% set dataSrcset = dataSrcset|merge([
-						item.url ~ paramsImgix ~ ' ' ~ item.width ~ 'w'
-					]) %}
-				{% endfor %}
+		{% else %}
 
-			{% endif %}
+			{% set img = (settings.asset|length) ? craft.imgix.transformImage( settings.asset, { width: settings.width, height: settings.height }) : '' %}
+			{% set srcset = (settings.srcset|length) ? craft.imgix.transformImage( settings.asset, settings.srcset) : '' %}
+			{% set paramsImgix = (settings.paramsImgix is defined and settings.paramsImgix|length) ? settings.paramsImgix ~ paramsImgixFp : paramsImgixDefault ~ paramsImgixFp %}
+			{% set dataSrcset = [] %}
+			{% for item in srcset.transformed %}
+				{% set dataSrcset = dataSrcset|merge([
+					item.url ~ paramsImgix ~ ' ' ~ item.width ~ 'w'
+				]) %}
+			{% endfor %}
 
-			{# -- OUTPUT IMG TAG -- #}
-			{% if craft.config.devMode == true %}
+		{% endif %}
 
-				<img class="{{ lazyload ~ ' ' ~ class }}" 
-				src="{{ img.getUrl({width: settings.width, height: settings.height, mode: paramsCraft.mode, position: paramsCraft.position, quality: paramsCraft.quality}) }}" 
-				{{ (lazyload == true) ? 'data-' : '' }}src="{{ img.getUrl({width: settings.width, height: settings.height, mode: paramsCraft.mode, position: paramsCraft.position, quality: paramsCraft.quality}) }}" 
-				alt="{{ alt }}">
+		{# -- OUTPUT IMG TAG -- #}
+		{% if craft.app.config.general.imgix == false or settings.asset.extension == 'svg' %}
 
-			{% else  %}
+			<img class="fade {{ mode }} {{ lazyload ~ ' ' ~ class }}" 
+			src="{{ img.getUrl({width: settings.width, height: settings.height, mode: paramsCraft.mode, position: paramsCraft.position, quality: paramsCraft.quality}) }}" 
+			{{ (lazyload == true) ? 'data-' : '' }}src="{{ img.getUrl({width: settings.width, height: settings.height, mode: paramsCraft.mode, position: paramsCraft.position, quality: paramsCraft.quality}) }}" 
+			{{ (lazyload == true) ? 'data-' : '' }}srcset="{{- srcset|join(', ') -}}"
+			{{ (lazyload == true) ? 'data-' : '' }}sizes="{{ sizes }}" 
+			alt="{{ alt }}">
 
-				<img class="{{ lazyload ~ ' ' ~ class }}" 
-				src="{{ img.getUrl() ~ paramsImgix }}" 
-				{{ (lazyload == true) ? 'data-' : '' }}src="{{ img.getUrl() ~ paramsImgix }}" 
-				{{ (lazyload == true) ? 'data-' : '' }}srcset="{{ dataSrcset|join(', ') }}" 
-				{{ (lazyload == true) ? 'data-' : '' }}sizes="{{ sizes }}" 
-				alt="{{ alt }}">
+		{% else  %}
 
-			{% endif %}
+			<img class="fade {{ mode }} {{ lazyload ~ ' ' ~ class }}" 
+			src="{{ img.getUrl() ~ paramsImgix }}" 
+			{{ (lazyload == true) ? 'data-' : '' }}src="{{ img.getUrl() ~ paramsImgix }}" 
+			{{ (lazyload == true) ? 'data-' : '' }}srcset="{{ dataSrcset|join(', ') }}" 
+			{{ (lazyload == true) ? 'data-' : '' }}sizes="{{ sizes }}" 
+			alt="{{ alt }}">
 
-		{% endspaceless %}
-	{% endmacro %}
+		{% endif %}
 
+	{% endspaceless %}
+{% endmacro %}
+```
 
 ## Basic usage
+```
+{% set settings = {
+	asset: img,
+	width: 768,
+	height: 768,
+	srcset: [
+	 	{width: 768, height: 768},
+	],
+} %}
 
-	{% set settings = {
-		asset: img,
-		width: 768,
-		height: 768,
-		srcset: [
-		 	{...},
-		 	{width: 768, height: 768},
-		 	{...},
-		],
-	} %}
+{% import '_macros/images' as macrosImages %}
+{{ macrosImages.srcsetImgix(settings) }}
+```
 
-	{% import '_macros/srcset--imgix' as macrosImages %}
-
-	{{ macrosImages.srcsetImgix(settings) }}
 
 
 ## All settings
